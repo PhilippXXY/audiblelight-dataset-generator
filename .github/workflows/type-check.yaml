@@ -37,4 +37,4 @@ jobs:
 
       - name: Run mypy
         run: |
-          uv run mypy src --ignore-missing-imports --explicit-package-bases --exclude=src/lam_min
+          uv run mypy src --ignore-missing-imports --explicit-package-bases
