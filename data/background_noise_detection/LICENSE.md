@@ -1,0 +1,1 @@
+Dataset taken from [Axon Labs – Background Noise Detection Dataset](https://www.kaggle.com/datasets/axondata/background-noise-detection-dataset) and distributed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) license.

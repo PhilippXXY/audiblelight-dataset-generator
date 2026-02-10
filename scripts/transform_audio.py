@@ -43,7 +43,7 @@ def process_audio_files(input_path: Path, output_path: Path, sample_rate: int = 
     output_path.mkdir(parents=True, exist_ok=True)
 
     # Get all .wav files in the input directory
-    audio_files = list(input_path.glob("*.wav"))
+    audio_files = list(input_path.rglob("*.wav"))
 
     print(f"Found {len(audio_files)} audio files to process.")
 
