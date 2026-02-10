@@ -6,7 +6,7 @@ paths:
 runtime:
   seed: 0
   num_scenes: 100
-  num_mics_per_scene: 1
+  num_mics_per_scene: 5
 
 mesh:
   mesh_dir: data/gibson
@@ -20,7 +20,7 @@ scene:
   bg_noise_floor_db: -50.0
 
 events:
-  events_per_scene: 2
+  events_per_scene: 15
   event_duration_min: 0.5
   event_duration_max: 10.0
   snr_min: 0.0
