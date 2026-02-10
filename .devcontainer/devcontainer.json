@@ -15,7 +15,8 @@
         "astral-sh.uv",
         "mechatroner.rainbow-csv",
         "shd101wyy.markdown-preview-enhanced",
-        "ms-toolsai.jupyter"
+        "ms-toolsai.jupyter",
+        "sukumo28.wav-preview"
       ],
       "settings": {
         // Python settings
@@ -60,7 +61,8 @@
         "editor.renderWhitespace": "trailing",
         "git.autofetch": true,
         "githubPullRequests.pullBranch": "never",
-        "workbench.editor.tabSizing": "fixed"
+        "workbench.editor.tabSizing": "fixed",
+        "editor.defaultFormatter": "charliermarsh.ruff"
       }
     }
   },
