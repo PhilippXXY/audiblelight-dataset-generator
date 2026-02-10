@@ -5,7 +5,6 @@ This module provides functionality to generate realistic room impulse responses
 and acoustic scenes with multiple sound events for dataset creation.
 """
 
-import argparse
 import shutil
 import tempfile
 from pathlib import Path
@@ -27,29 +26,26 @@ from tqdm import tqdm
 import utils
 
 
-def main() -> None:
+def main(config_path: Path | str = Path("config/config.yaml")) -> None:
     """Generate a dataset with AudibleLight."""
-    ap = argparse.ArgumentParser(description="Generate a dataset with AudibleLight.")
-    args = utils.add_arguments(ap)
-    rng = np.random.default_rng(seed=args.seed)
+    cfg = utils.load_config(config_path)
+    rng = np.random.default_rng(seed=cfg.runtime.seed)
 
-    fg_files = utils.list_audio_files(args.fg_dir)
+    fg_files = utils.list_audio_files(cfg.paths.fg_dir)
     if not fg_files:
         raise ValueError(
-            f"No audio files found in the specified foreground directory: '{args.fg_dir}'"
+            "No audio files found in the specified foreground directory: "
+            f"'{cfg.paths.fg_dir}'"
         )
 
-    audio_out = args.audio_out
-    meta_out = args.meta_out
+    audio_out = cfg.paths.audio_out
+    meta_out = cfg.paths.meta_out
     audio_out.mkdir(parents=True, exist_ok=True)
     meta_out.mkdir(parents=True, exist_ok=True)
 
-    if args.num_scenes > 0:
-        n_scenes = args.num_scenes
-    else:
-        raise ValueError("Set --num_scenes.")
+    n_scenes = cfg.runtime.num_scenes
 
-    meshes = utils.ensure_meshes(args.mesh_dir, args.download_gibson)
+    meshes = utils.ensure_meshes(cfg.mesh.mesh_dir, cfg.mesh.download_gibson_flag)
 
     event_augs = [
         Compressor,
@@ -69,36 +65,36 @@ def main() -> None:
         backend_kwargs = utils.build_backend_kwargs_rlr(mesh_path)
 
         scene = audiblelight.Scene(
-            duration=args.scene_duration,
-            sample_rate=args.sample_rate,
+            duration=cfg.scene.scene_duration,
+            sample_rate=cfg.scene.sample_rate,
             backend="rlr",
             backend_kwargs=backend_kwargs,
-            fg_path=args.fg_dir,
-            max_overlap=args.max_overlap,
+            fg_path=cfg.paths.fg_dir,
+            max_overlap=cfg.scene.max_overlap,
             class_mapping=utils.AlwaysClass0Mapping(),
             event_augmentations=event_augs,
-            ref_db=args.bg_noise_floor_db,
+            ref_db=cfg.scene.bg_noise_floor_db,
         )
 
         # Add microphones at random positions within the mesh bounds for this scene
-        for _ in range(args.num_mics_per_scene):
+        for _ in range(cfg.runtime.num_mics_per_scene):
             utils.add_random_microphone(
                 scene,
-                mic_type=args.mic_type,
+                mic_type=cfg.scene.mic_type,
                 mesh=mesh,
                 rng=rng,
                 max_attempts=30,
             )
 
-        for _ in range(args.events_per_scene):
+        for _ in range(cfg.events.events_per_scene):
             utils.add_random_fg_event(
                 fg_files=fg_files,
                 scene=scene,
-                scene_duration=args.scene_duration,
-                event_duration_min=args.event_duration_min,
-                event_duration_max=args.event_duration_max,
-                snr_min=args.snr_min,
-                snr_max=args.snr_max,
+                scene_duration=cfg.scene.scene_duration,
+                event_duration_min=cfg.events.event_duration_min,
+                event_duration_max=cfg.events.event_duration_max,
+                snr_min=cfg.events.snr_min,
+                snr_max=cfg.events.snr_max,
                 mesh=mesh,
                 rng=rng,
                 rng_needed=False,
@@ -123,9 +119,9 @@ def main() -> None:
             wavs = {p.stem: p for p in tmpdir_path.glob("*.wav")}
             csvs = {p.stem: p for p in tmpdir_path.glob("*.csv")}
             common = sorted(set(wavs) & set(csvs))
-            if len(common) != args.num_mics_per_scene:
+            if len(common) != cfg.runtime.num_mics_per_scene:
                 raise RuntimeError(
-                    f"Expected {args.num_mics_per_scene} wav/csv pairs, got {len(common)}. "
+                    f"Expected {cfg.runtime.num_mics_per_scene} wav/csv pairs, got {len(common)}. "
                     f"WAVs={len(wavs)}, CSVs={len(csvs)} in '{tmpdir_path}'."
                 )
 

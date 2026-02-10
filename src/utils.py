@@ -1,23 +1,73 @@
 """Utility functions for the AudibleLight dataset generator."""
 
-import argparse
+import warnings
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Union
+from typing import Any, Union
 
 import audiblelight
 import numpy as np
 import trimesh
+import yaml
 from audiblelight.class_mappings import ClassMapping
 from audiblelight.download_data import download_gibson
 
-timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-
 DEFAULT_FG_DIR = Path("data/esc50/fg_esc50_24k_mono")
-DEFAULT_OUT_ROOT = Path("output").joinpath(f"dataset_{timestamp}")
-DEFAULT_AUDIO_OUT = DEFAULT_OUT_ROOT.joinpath("em32_dev", "dev-train")
-DEFAULT_META_OUT = DEFAULT_OUT_ROOT.joinpath("metadata_dev", "dev-train")
+DEFAULT_MESH_DIR = Path("data/gibson")
 
+@dataclass(frozen=True)
+class PathsConfig:
+    """Path configuration for data input/output."""
+
+    fg_dir: Path
+    audio_out: Path
+    meta_out: Path
+
+@dataclass(frozen=True)
+class RuntimeConfig:
+    """Runtime controls for scene generation."""
+
+    seed: int
+    num_scenes: int
+    num_mics_per_scene: int
+
+@dataclass(frozen=True)
+class MeshConfig:
+    """Mesh discovery."""
+
+    mesh_dir: Path
+    download_gibson_flag: bool
+
+@dataclass(frozen=True)
+class SceneConfig:
+    """Scene-wide simulation configuration."""
+
+    sample_rate: int
+    scene_duration: float
+    max_overlap: int
+    mic_type: str
+    bg_noise_floor_db: float
+
+@dataclass(frozen=True)
+class EventsConfig:
+    """Foreground event generation configuration."""
+
+    events_per_scene: int
+    event_duration_min: float
+    event_duration_max: float
+    snr_min: float
+    snr_max: float
+
+@dataclass(frozen=True)
+class GeneratorConfig:
+    """Top-level configuration consumed by dataset generation."""
+
+    paths: PathsConfig
+    runtime: RuntimeConfig
+    mesh: MeshConfig
+    scene: SceneConfig
+    events: EventsConfig
 
 class AlwaysClass0Mapping(ClassMapping):
     """A ClassMapping that always returns class index 0 with a dummy label."""
@@ -29,136 +79,324 @@ class AlwaysClass0Mapping(ClassMapping):
         """Return class index 0 and label 'dummy'."""
         return (0, "dummy")
 
-
-def add_arguments(ap: argparse.ArgumentParser) -> argparse.Namespace:
+def _build_default_output_paths() -> tuple[Path, Path]:
     """
-    Add command-line arguments to the argument parser for audio dataset generation.
-
-    Parameters
-    ----------
-    ap: argparse.ArgumentParser
-        The argument parser to add arguments to.
+    Build timestamped default output paths.
 
     Returns
     -------
-    argparse.Namespace
-        The parsed command-line arguments.
+    : tuple[Path, Path]
+        A tuple containing the default audio output directory and metadata output directory
+        as Path objects.
     """
-    ap.add_argument(
-        "--fg-dir",
-        type=Path,
-        default=DEFAULT_FG_DIR,
-        help="Directory containing foreground audio files.",
-    )
-    ap.add_argument(
-        "--audio-out",
-        type=Path,
-        default=DEFAULT_AUDIO_OUT,
-        help="Directory to save generated audio files.",
-    )
-    ap.add_argument(
-        "--meta-out",
-        type=Path,
-        default=DEFAULT_META_OUT,
-        help="Directory to save metadata files.",
-    )
-    ap.add_argument(
-        "--seed",
-        type=int,
-        default=0,
-        help="Random seed for reproducibility.",
-    )
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    output_root = Path("output").joinpath(f"dataset_{timestamp}")
+    audio_out = output_root.joinpath("em32_dev", "dev-train")
+    meta_out = output_root.joinpath("metadata_dev", "dev-train")
+    return audio_out, meta_out
 
-    ap.add_argument(
-        "--mesh-dir",
-        type=Path,
-        default=Path("data/gibson"),
-        help="Directory containing .glb meshes for the rlr backend.",
-    )
-    ap.add_argument(
-        "--download-gibson",
-        action="store_true",
-        help="If set and no meshes are found, download default Gibson meshes into --mesh-dir.",
-    )
+def _default_config_dict() -> dict[str, dict[str, Any]]:
+    """
+    Return default config values equivalent to prior argparse defaults.
 
-    ap.add_argument(
-        "--sample-rate",
-        type=int,
-        default=24000,
-        help="Sample rate for audio generation.",
-    )
-    ap.add_argument(
-        "--scene-duration",
-        type=float,
-        default=60.0,
-        help="Duration of each generated audio file in seconds.",
-    )
-    ap.add_argument(
-        "--events-per-scene",
-        type=int,
-        default=15,
-        help="Number of foreground events to include in each scene.",
-    )
-    ap.add_argument(
-        "--max-overlap",
-        type=int,
-        default=15,
-        help="Maximum allowed overlap between foreground events in seconds.",
-    )
+    Returns
+    -------
+    : dict[str, dict[str, Any]]
+        A nested dictionary containing default configuration values for all config sections.
+    """
+    default_audio_out, default_meta_out = _build_default_output_paths()
+    return {
+        "paths": {
+            "fg_dir": DEFAULT_FG_DIR,
+            "audio_out": default_audio_out,
+            "meta_out": default_meta_out,
+        },
+        "runtime": {
+            "seed": 0,
+            "num_scenes": 100,
+            "num_mics_per_scene": 5,
+        },
+        "mesh": {
+            "mesh_dir": DEFAULT_MESH_DIR,
+            "download_gibson_flag": True,
+        },
+        "scene": {
+            "sample_rate": 24000,
+            "scene_duration": 60.0,
+            "max_overlap": 15,
+            "mic_type": "eigenmike32",
+            "bg_noise_floor_db": -50.0,
+        },
+        "events": {
+            "events_per_scene": 15,
+            "event_duration_min": 0.5,
+            "event_duration_max": 10.0,
+            "snr_min": 0.0,
+            "snr_max": 30.0,
+        },
+    }
 
-    ap.add_argument(
-        "--event-duration-min",
-        type=float,
-        default=0.5,
-        help="Minimum duration of foreground events in seconds.",
-    )
-    ap.add_argument(
-        "--event-duration-max",
-        type=float,
-        default=10.0,
-        help="Maximum duration of foreground events in seconds.",
-    )
-    ap.add_argument(
-        "--snr-min",
-        type=float,
-        default=0.0,
-        help="Minimum signal-to-noise ratio (SNR) for foreground events in decibels.",
-    )
-    ap.add_argument(
-        "--snr-max",
-        type=float,
-        default=30.0,
-        help="Maximum signal-to-noise ratio (SNR) for foreground events in decibels.",
-    )
-    ap.add_argument(
-        "--bg-noise-floor-db",
-        type=float,
-        default=-50.0,
-        help="Reference decibel level for background noise when creating Scene.",
-    )
+def _normalise_mapping(value: Any, key_name: str) -> dict[str, Any]:
+    """
+    Validate that a YAML value is a mapping with string keys.
 
-    ap.add_argument(
-        "--num-scenes",
-        type=int,
-        default=100,
-        help="Number of scenes to generate.",
-    )
-    ap.add_argument(
-        "--num-mics-per-scene",
-        type=int,
-        default=5,
-        help="Number of microphones to include in each scene.",
-    )
+    Parameters
+    ----------
+    value: Any
+        The value to validate and normalise.
+    key_name: str
+        The name of the config key being normalised, used for error messages.
 
-    ap.add_argument(
-        "--mic-type",
-        type=str,
-        default="eigenmike32",
-        help="Type of microphone to use for recording (e.g., 'eigenmike32' or 'eigenmike64').",
+    Returns
+    -------
+    : dict[str, Any]
+        The normalised mapping with string keys.
+
+    """
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"Config key '{key_name}' must be a mapping.")
+
+    normalized: dict[str, Any] = {}
+    for key, mapping_value in value.items():
+        if not isinstance(key, str):
+            raise ValueError(
+                f"Config key '{key_name}' contains a non-string key: {key!r}."
+            )
+        normalized[key] = mapping_value
+    return normalized
+
+
+def _warn_unknown_keys(
+    config_values: dict[str, Any],
+    allowed_values: dict[str, Any],
+    section_name: str | None = None,
+) -> None:
+    """
+    Warn about unknown keys while leaving config parsing permissive.
+
+    Parameters
+    ----------
+    config_values: dict[str, Any]
+        The config values to check for unknown keys.
+    allowed_values: dict[str, Any]
+        The allowed config keys to check against.
+    section_name: str | None, optional
+        The name of the config section being checked, used for more specific warning messages.
+        If None, a more generic warning message will be issued. Default is None.
+
+    Returns
+    -------
+    : None
+    """
+    unknown_keys = sorted(set(config_values).difference(set(allowed_values)))
+    for key in unknown_keys:
+        if section_name is None:
+            warnings.warn(f"Unknown config section '{key}' will be ignored.", stacklevel=2)
+        else:
+            warnings.warn(
+                f"Unknown config key '{section_name}.{key}' will be ignored.",
+                stacklevel=2,
+            )
+
+
+def _coerce_bool(value: Any, key_name: str) -> bool:
+    """
+    Coerce a config value to bool, failing on invalid values.
+
+    Parameters
+    ----------
+    value: Any
+        The value to coerce to bool.
+    key_name: str
+        The name of the config key being coerced, used for error messages.
+
+    Returns
+    -------
+    : bool
+        The coerced boolean value.
+    """
+    if isinstance(value, bool):
+        return value
+    raise ValueError(f"Config key '{key_name}' must be a boolean.")
+
+def _coerce_int(value: Any, key_name: str) -> int:
+    """
+    Coerce a config value to int, failing on invalid values.
+
+    Parameters
+    ----------
+    value: Any
+        The value to coerce to int.
+    key_name: str
+        The name of the config key being coerced, used for error messages.
+
+    Returns
+    -------
+    : int
+        The coerced integer value.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"Config key '{key_name}' must be an integer.")
+    return value
+
+
+def _coerce_float(value: Any, key_name: str) -> float:
+    """
+    Coerce a config value to float, failing on invalid values.
+
+    Parameters
+    ----------
+    value: Any
+        The value to coerce to float.
+    key_name: str
+        The name of the config key being coerced, used for error messages.
+
+    Returns
+    -------
+    : float
+        The coerced float value.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"Config key '{key_name}' must be a number.")
+    return float(value)
+
+
+def _coerce_str(value: Any, key_name: str) -> str:
+    """
+    Coerce a config value to str, failing on invalid values.
+
+    Parameters
+    ----------
+    value: Any
+        The value to coerce to str.
+    key_name: str
+        The name of the config key being coerced, used for error messages.
+
+    Returns
+    -------
+    : str
+        The coerced string value.
+    """
+    if not isinstance(value, str):
+        raise ValueError(f"Config key '{key_name}' must be a string.")
+    if value == "":
+        raise ValueError(f"Config key '{key_name}' must not be empty.")
+    return value
+
+def _coerce_path(value: Any, key_name: str) -> Path:
+    """
+    Coerce a config value to Path, failing on invalid values.
+
+    Parameters
+    ----------
+    value: Any
+        The value to coerce to Path.
+    key_name: str
+        The name of the config key being coerced, used for error messages.
+
+    Returns
+    -------
+    : Path
+        The coerced Path value.
+    """
+    if isinstance(value, Path):
+        path = value
+    elif isinstance(value, str):
+        if value == "":
+            raise ValueError(f"Config key '{key_name}' must not be empty.")
+        path = Path(value)
+    else:
+        raise ValueError(f"Config key '{key_name}' must be a path string.")
+    return path
+
+
+def load_config(config_path: Path | str) -> GeneratorConfig:
+    """
+    Load generator config from YAML with defaults, warnings, and validation.
+
+    Parameters
+    ----------
+    config_path: Path | str
+        The path to the YAML configuration file.
+
+    Returns
+    -------
+    : GeneratorConfig
+        The loaded and validated generator configuration.
+    """
+    config_file = Path(config_path)
+    if not config_file.is_absolute():
+        config_file = Path.cwd().joinpath(config_file)
+    if not config_file.exists():
+        raise FileNotFoundError(f"Configuration file not found: '{config_file}'.")
+
+    with config_file.open(encoding="utf-8") as file:
+        loaded_config = yaml.safe_load(file)
+
+    raw_config = _normalise_mapping(loaded_config, "root")
+    defaults = _default_config_dict()
+    _warn_unknown_keys(raw_config, defaults)
+
+    merged_config: dict[str, dict[str, Any]] = {}
+    for section_name, default_values in defaults.items():
+        raw_section = _normalise_mapping(raw_config.get(section_name, {}), section_name)
+        _warn_unknown_keys(raw_section, default_values, section_name=section_name)
+        merged_section = default_values.copy()
+        merged_section.update(raw_section)
+        merged_config[section_name] = merged_section
+
+    paths_section = merged_config["paths"]
+    runtime_section = merged_config["runtime"]
+    mesh_section = merged_config["mesh"]
+    scene_section = merged_config["scene"]
+    events_section = merged_config["events"]
+
+    runtime_num_scenes = _coerce_int(runtime_section["num_scenes"], "runtime.num_scenes")
+    if runtime_num_scenes <= 0:
+        raise ValueError("Config key 'runtime.num_scenes' must be greater than 0.")
+
+    return GeneratorConfig(
+        paths=PathsConfig(
+            fg_dir=_coerce_path(paths_section["fg_dir"], "paths.fg_dir"),
+            audio_out=_coerce_path(paths_section["audio_out"], "paths.audio_out"),
+            meta_out=_coerce_path(paths_section["meta_out"], "paths.meta_out"),
+        ),
+        runtime=RuntimeConfig(
+            seed=_coerce_int(runtime_section["seed"], "runtime.seed"),
+            num_scenes=runtime_num_scenes,
+            num_mics_per_scene=_coerce_int(
+                runtime_section["num_mics_per_scene"], "runtime.num_mics_per_scene"
+            ),
+        ),
+        mesh=MeshConfig(
+            mesh_dir=_coerce_path(mesh_section["mesh_dir"], "mesh.mesh_dir"),
+            download_gibson_flag=_coerce_bool(mesh_section["download_gibson_flag"], "mesh.download_gibson_flag"),
+        ),
+        scene=SceneConfig(
+            sample_rate=_coerce_int(scene_section["sample_rate"], "scene.sample_rate"),
+            scene_duration=_coerce_float(scene_section["scene_duration"], "scene.scene_duration"),
+            max_overlap=_coerce_int(scene_section["max_overlap"], "scene.max_overlap"),
+            mic_type=_coerce_str(scene_section["mic_type"], "scene.mic_type"),
+            bg_noise_floor_db=_coerce_float(
+                scene_section["bg_noise_floor_db"], "scene.bg_noise_floor_db"
+            ),
+        ),
+        events=EventsConfig(
+            events_per_scene=_coerce_int(
+                events_section["events_per_scene"], "events.events_per_scene"
+            ),
+            event_duration_min=_coerce_float(
+                events_section["event_duration_min"], "events.event_duration_min"
+            ),
+            event_duration_max=_coerce_float(
+                events_section["event_duration_max"], "events.event_duration_max"
+            ),
+            snr_min=_coerce_float(events_section["snr_min"], "events.snr_min"),
+            snr_max=_coerce_float(events_section["snr_max"], "events.snr_max"),
+        ),
     )
-
-    return ap.parse_args()
-
 
 def list_audio_files(root_dir: Path) -> list[Path]:
     """
@@ -200,7 +438,9 @@ def list_mesh_files(mesh_dir: Path) -> list[Path]:
         If the specified path is not a valid directory or does not exist.
     """
     if not mesh_dir.is_dir() or not mesh_dir.exists():
-        raise ValueError(f"The specified path '{mesh_dir}' is not a valid directory.")
+        print(f"The specified mesh directory '{mesh_dir}' is not valid. Download dataset...")
+        # raise ValueError(f"The specified path '{mesh_dir}' is not a valid directory.")
+        return []
     mesh_files = [p for p in mesh_dir.rglob("*.glb") if p.is_file()]
     return sorted(mesh_files)
 
@@ -234,9 +474,9 @@ def ensure_meshes(mesh_dir: Path, download_gibson_flag: bool) -> list[Path]:
         If no mesh files are found even after downloading Gibson dataset.
     """
     meshes = list_mesh_files(mesh_dir)
-    if meshes:
+    if meshes is not None and len(meshes) > 0:
         return meshes
-    if not download_gibson_flag:
+    elif not download_gibson_flag:
         raise ValueError(
             f"No mesh files found in '{mesh_dir}'. "
             "Use --download-gibson or point --mesh-dir to meshes."

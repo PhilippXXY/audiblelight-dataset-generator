@@ -1,0 +1,27 @@
+paths:
+  fg_dir: data/esc50/fg_esc50_24k_mono
+  # audio_out: output/dataset_<timestamp>/em32_dev/dev-train
+  # meta_out: output/dataset_<timestamp>/metadata_dev/dev-train
+
+runtime:
+  seed: 0
+  num_scenes: 100
+  num_mics_per_scene: 1
+
+mesh:
+  mesh_dir: data/gibson
+  download_gibson_flag: true
+
+scene:
+  sample_rate: 24000
+  scene_duration: 60.0
+  max_overlap: 15
+  mic_type: eigenmike32
+  bg_noise_floor_db: -50.0
+
+events:
+  events_per_scene: 2
+  event_duration_min: 0.5
+  event_duration_max: 10.0
+  snr_min: 0.0
+  snr_max: 30.0
