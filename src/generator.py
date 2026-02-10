@@ -5,6 +5,7 @@ This module provides functionality to generate realistic room impulse responses
 and acoustic scenes with multiple sound events for dataset creation.
 """
 
+import argparse
 import shutil
 import tempfile
 from pathlib import Path
@@ -135,5 +136,20 @@ def main(config_path: Path | str = Path("config/config.yaml")) -> None:
     print(f"Metadata: {meta_out}")
 
 
+def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for dataset generation."""
+    parser = argparse.ArgumentParser(
+        description="Generate synthetic acoustic datasets using AudibleLight."
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("config/config.yaml"),
+        help="Path to YAML config file.",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    main()
+    args = _parse_args()
+    main(config_path=args.config)

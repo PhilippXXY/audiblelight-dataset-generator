@@ -1,0 +1,150 @@
+name: Create Release from PR
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Extract version from PR title
+        id: version
+        run: |
+          title="${{ github.event.pull_request.title }}"
+          echo "PR title: $title"
+
+          # Accept (v1.2.3, v01.02.300, v1.2.3-alpha) and the same without 'v'
+          if echo "$title" | grep -Eq '^v[0-9]+(\.[0-9]+){2}(-[0-9A-Za-z.-]+)?$'; then
+            version="$title"
+          elif echo "$title" | grep -Eq '^[0-9]+(\.[0-9]+){2}(-[0-9A-Za-z.-]+)?$'; then
+            version="v$title"
+          else
+            echo "PR title is not a valid version (expected vX.Y.Z, vX.Y.Z-suffix, or X.Y.Z, got: $title)"
+            exit 1
+          fi
+
+          echo "Using version: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check if stable release
+        id: check-stable
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Stable if no prerelease suffix (e.g., -alpha, -beta, -rc)
+          if echo "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "is_stable=true" >> "$GITHUB_OUTPUT"
+            echo "Version $VERSION is stable"
+          else
+            echo "is_stable=false" >> "$GITHUB_OUTPUT"
+            echo "Version $VERSION is a prerelease"
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Create git tag for merge commit
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          MERGE_SHA="${{ github.event.pull_request.merge_commit_sha }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          echo "Tagging commit $MERGE_SHA with $VERSION"
+          git tag "$VERSION" "$MERGE_SHA"
+          git push origin "$VERSION"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          REPO_LOWER="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          VERSION="${{ steps.version.outputs.version }}"
+          IS_STABLE="${{ steps.check-stable.outputs.is_stable }}"
+
+          VERSION_TAG="ghcr.io/${REPO_LOWER}:${VERSION}"
+
+          if [ "${IS_STABLE}" = "true" ]; then
+            LATEST_TAG="ghcr.io/${REPO_LOWER}:latest"
+            TAGS="${VERSION_TAG},${LATEST_TAG}"
+            echo "Building with tags: ${VERSION_TAG}, ${LATEST_TAG}"
+          else
+            TAGS="${VERSION_TAG}"
+            echo "Building with tag: ${VERSION_TAG} (prerelease, no latest)"
+          fi
+
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "image=${VERSION_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract Python version from pyproject.toml
+        id: python-version
+        run: |
+          VERSION=$(grep -oP '(?<=requires-python = "==)\d+\.\d+\.\d+' pyproject.toml)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            PYTHON_VERSION=${{ steps.python-version.outputs.version }}
+          platforms: linux/amd64
+
+      - name: Compute image digest
+        id: img
+        run: |
+          IMAGE="${{ steps.tags.outputs.image }}"
+
+          # Parse the digest from imagetools inspect output
+          DIGEST=$(docker buildx imagetools inspect "$IMAGE" 2>&1 | grep -E '^Digest:' | head -1 | awk '{print $2}')
+          if [ -z "$DIGEST" ]; then
+            echo "No digest found for $IMAGE" >&2
+            exit 1
+          fi
+          FULL_DIGEST="$IMAGE@$DIGEST"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "digest=$FULL_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Image: $IMAGE"
+          echo "Digest: $FULL_DIGEST"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          body: |
+            Container image:
+            - ${{ steps.img.outputs.image }}
+            - ${{ steps.img.outputs.digest }}
+
+            Pull:
+            docker pull ${{ steps.img.outputs.image }}
+          draft: false
+          prerelease: ${{ steps.check-stable.outputs.is_stable != 'true' }}
