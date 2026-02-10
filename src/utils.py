@@ -22,9 +22,7 @@ class AlwaysClass0Mapping(ClassMapping):
     def __init__(self) -> None:
         super().__init__(mapping={"dummy": 0})
 
-    def infer_label_idx_from_filepath(
-        self, filepath: Union[Path, str]
-    ) -> tuple[int, str]:
+    def infer_label_idx_from_filepath(self, filepath: Union[Path, str]) -> tuple[int, str]:
         """Return class index 0 and label 'dummy'."""
         return (0, "dummy")
 
@@ -69,10 +67,10 @@ def add_arguments(ap: argparse.ArgumentParser) -> argparse.Namespace:
     )
 
     ap.add_argument(
-    "--mesh-dir",
-    type=Path,
-    default=Path("data/gibson"),
-    help="Directory containing .glb meshes for the rlr backend.",
+        "--mesh-dir",
+        type=Path,
+        default=Path("data/gibson"),
+        help="Directory containing .glb meshes for the rlr backend.",
     )
     ap.add_argument(
         "--download-gibson",
@@ -152,6 +150,7 @@ def add_arguments(ap: argparse.ArgumentParser) -> argparse.Namespace:
 
     return ap.parse_args()
 
+
 def list_audio_files(root_dir: Path) -> list[Path]:
     """
     List all audio files in the specified directory.
@@ -170,6 +169,7 @@ def list_audio_files(root_dir: Path) -> list[Path]:
         raise ValueError(f"The specified path '{root_dir}' is not a valid directory.")
     audio_files = list(root_dir.glob("*.wav"))
     return sorted(audio_files)
+
 
 def list_mesh_files(mesh_dir: Path) -> list[Path]:
     """
@@ -194,6 +194,7 @@ def list_mesh_files(mesh_dir: Path) -> list[Path]:
         raise ValueError(f"The specified path '{mesh_dir}' is not a valid directory.")
     mesh_files = [p for p in mesh_dir.rglob("*.glb") if p.is_file()]
     return sorted(mesh_files)
+
 
 def ensure_meshes(mesh_dir: Path, download_gibson_flag: bool) -> list[Path]:
     """
@@ -241,6 +242,7 @@ def ensure_meshes(mesh_dir: Path, download_gibson_flag: bool) -> list[Path]:
         raise RuntimeError(f"Downloaded Gibson but still found no .glb meshes under '{mesh_dir}'.")
     return meshes
 
+
 def build_backend_kwargs_rlr(mesh_path: Path) -> dict[str, object]:
     """
     Build backend keyword arguments for RLR (Ray-based Light Rendering) backend.
@@ -261,6 +263,7 @@ def build_backend_kwargs_rlr(mesh_path: Path) -> dict[str, object]:
         "add_to_context": False,
     }
 
+
 def add_random_microphone(  # noqa: PLR0913
     scene: audiblelight.Scene,
     mic_type: str,
@@ -268,7 +271,7 @@ def add_random_microphone(  # noqa: PLR0913
     rng: np.random.Generator,
     rng_needed: bool = True,
     max_attempts: int = 30,
-    ) -> bool:
+) -> bool:
     """
     Attempt to add a microphone at a random valid position in the scene.
 
@@ -307,7 +310,7 @@ def add_random_microphone(  # noqa: PLR0913
                 return True  # Successfully added microphone, exit the retry loop
             except ValueError:
                 if attempt == max_attempts - 1:
-                # Give up on adding this microphone and move on to the next one
+                    # Give up on adding this microphone and move on to the next one
                     return False
         return False
     else:
@@ -319,6 +322,7 @@ def add_random_microphone(  # noqa: PLR0913
             return True
         except ValueError:
             return False
+
 
 def add_random_fg_event(  # noqa: PLR0913
     fg_files: list[Path],
@@ -391,7 +395,7 @@ def add_random_fg_event(  # noqa: PLR0913
                 return True  # Successfully added event, exit the retry loop
             except ValueError:
                 if attempt == max_attempts - 1:
-                # Give up on adding this event and move on to the next one
+                    # Give up on adding this event and move on to the next one
                     return False
         return False
     else:

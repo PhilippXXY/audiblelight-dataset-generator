@@ -43,7 +43,6 @@ def main() -> None:
     meshes = utils.ensure_meshes(args.mesh_dir, args.download_gibson)
 
     for scene_idx in tqdm(range(n_scenes), desc="Generating scenes"):
-
         stem = f"scene_{scene_idx:05d}"
 
         mesh_path = meshes[int(rng.integers(0, len(meshes)))]
@@ -60,11 +59,8 @@ def main() -> None:
             class_mapping=utils.AlwaysClass0Mapping(),
         )
 
-
-
         # Add microphones at random positions within the mesh bounds for this scene
         for _ in range(args.num_mics_per_scene):
-
             utils.add_random_microphone(
                 scene,
                 mic_type=args.mic_type,
@@ -118,6 +114,7 @@ def main() -> None:
     print(f"Wrote {n_scenes} scenes")
     print(f"Audio:    {audio_out}")
     print(f"Metadata: {meta_out}")
+
 
 if __name__ == "__main__":
     main()
