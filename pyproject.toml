@@ -13,6 +13,7 @@ dependencies = [
     "rlr-audio-propagation==0.0.1",
     "soundfile==0.13.1",
     "tqdm==4.67.1",
+    "trimesh==4.6.11",
     "uvicorn[standard]==0.32.1",
 ]
 
