@@ -1,6 +1,7 @@
 """Utility functions for the AudibleLight dataset generator."""
 
 import argparse
+from datetime import datetime
 from pathlib import Path
 from typing import Union
 
@@ -10,8 +11,10 @@ import trimesh
 from audiblelight.class_mappings import ClassMapping
 from audiblelight.download_data import download_gibson
 
+timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+
 DEFAULT_FG_DIR = Path("data/esc50/fg_esc50_24k_mono")
-DEFAULT_OUT_ROOT = Path("output")
+DEFAULT_OUT_ROOT = Path("output").joinpath(f"dataset_{timestamp}")
 DEFAULT_AUDIO_OUT = DEFAULT_OUT_ROOT.joinpath("em32_dev", "dev-train")
 DEFAULT_META_OUT = DEFAULT_OUT_ROOT.joinpath("metadata_dev", "dev-train")
 
@@ -93,13 +96,13 @@ def add_arguments(ap: argparse.ArgumentParser) -> argparse.Namespace:
     ap.add_argument(
         "--events-per-scene",
         type=int,
-        default=6,
+        default=15,
         help="Number of foreground events to include in each scene.",
     )
     ap.add_argument(
         "--max-overlap",
         type=int,
-        default=3,
+        default=15,
         help="Maximum allowed overlap between foreground events in seconds.",
     )
 
@@ -126,6 +129,12 @@ def add_arguments(ap: argparse.ArgumentParser) -> argparse.Namespace:
         type=float,
         default=30.0,
         help="Maximum signal-to-noise ratio (SNR) for foreground events in decibels.",
+    )
+    ap.add_argument(
+        "--bg-noise-floor-db",
+        type=float,
+        default=-50.0,
+        help="Reference decibel level for background noise when creating Scene.",
     )
 
     ap.add_argument(
@@ -391,6 +400,7 @@ def add_random_fg_event(  # noqa: PLR0913
                     duration=event_duration,
                     snr=signal_to_noise_ratio,
                     class_id=0,
+                    augmentations=3,
                 )
                 return True  # Successfully added event, exit the retry loop
             except ValueError:
@@ -411,3 +421,22 @@ def add_random_fg_event(  # noqa: PLR0913
             return True
         except ValueError:
             return False
+
+
+def get_random_bg_noise(rng: np.random.Generator) -> str:
+    """
+    Select a random background noise type.
+
+    Parameters
+    ----------
+    rng: np.random.Generator
+        A numpy random number generator instance.
+
+    Returns
+    -------
+    : str
+        A string representing a randomly selected background noise type.
+        Possible values are: "white", "pink", or "gaussian".
+    """
+    bg_noises = ["white", "pink", "gaussian"]
+    return bg_noises[int(rng.integers(0, len(bg_noises)))]

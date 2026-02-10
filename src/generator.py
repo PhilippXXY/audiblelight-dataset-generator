@@ -13,6 +13,15 @@ from pathlib import Path
 import audiblelight
 import numpy as np
 import trimesh
+from audiblelight.augmentation import (
+    Compressor,
+    Fade,
+    Gain,
+    HighpassFilter,
+    HighShelfFilter,
+    LowpassFilter,
+    LowShelfFilter,
+)
 from tqdm import tqdm
 
 import utils
@@ -42,6 +51,16 @@ def main() -> None:
 
     meshes = utils.ensure_meshes(args.mesh_dir, args.download_gibson)
 
+    event_augs = [
+        Compressor,
+        Fade,
+        Gain,
+        HighpassFilter,
+        HighShelfFilter,
+        LowpassFilter,
+        LowShelfFilter,
+    ]
+
     for scene_idx in tqdm(range(n_scenes), desc="Generating scenes"):
         stem = f"scene_{scene_idx:05d}"
 
@@ -57,6 +76,8 @@ def main() -> None:
             fg_path=args.fg_dir,
             max_overlap=args.max_overlap,
             class_mapping=utils.AlwaysClass0Mapping(),
+            event_augmentations=event_augs,
+            ref_db=args.bg_noise_floor_db,
         )
 
         # Add microphones at random positions within the mesh bounds for this scene
@@ -84,6 +105,8 @@ def main() -> None:
                 max_attempts=30,
             )
 
+        scene.add_ambience(noise=utils.get_random_bg_noise(rng))
+
         # Render to a temporary directory and then move to the final output location
         # in the DCASE-like format.
         with tempfile.TemporaryDirectory(prefix="audiblelight_") as tmpdir:
@@ -108,8 +131,8 @@ def main() -> None:
 
             for i, in_stem in enumerate(common):
                 out_stem = f"{stem}_mic{i:02d}"
-                shutil.move(str(wavs[in_stem]), str(audio_out / f"{out_stem}.wav"))
-                shutil.move(str(csvs[in_stem]), str(meta_out / f"{out_stem}.csv"))
+                shutil.move(str(wavs[in_stem]), str(audio_out.joinpath(f"{out_stem}.wav")))
+                shutil.move(str(csvs[in_stem]), str(meta_out.joinpath(f"{out_stem}.csv")))
 
     print(f"Wrote {n_scenes} scenes")
     print(f"Audio:    {audio_out}")
