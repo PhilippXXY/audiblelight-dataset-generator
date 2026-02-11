@@ -115,6 +115,8 @@ jobs:
           build-args: |
             PYTHON_VERSION=${{ steps.python-version.outputs.version }}
           platforms: linux/amd64
+          provenance: false
+          sbom: false
 
       - name: Compute image digest
         id: img
