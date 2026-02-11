@@ -16,6 +16,7 @@ from audiblelight.download_data import download_gibson
 DEFAULT_FG_DIR = Path("data/esc50/fg_esc50_24k_mono")
 DEFAULT_MESH_DIR = Path("data/gibson")
 
+
 @dataclass(frozen=True)
 class PathsConfig:
     """Path configuration for data input/output."""
@@ -69,7 +70,7 @@ class GeneratorConfig:
     scene: SceneConfig
     events: EventsConfig
 
-class AlwaysClass0Mapping(ClassMapping):
+class AlwaysClass0Mapping(ClassMapping):  # type: ignore[no-any-unimported]
     """A ClassMapping that always returns class index 0 with a dummy label."""
 
     def __init__(self) -> None:
@@ -161,9 +162,7 @@ def _normalise_mapping(value: Any, key_name: str) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
     for key, mapping_value in value.items():
         if not isinstance(key, str):
-            raise ValueError(
-                f"Config key '{key_name}' contains a non-string key: {key!r}."
-            )
+            raise ValueError(f"Config key '{key_name}' contains a non-string key: {key!r}.")
         normalized[key] = mapping_value
     return normalized
 
@@ -239,7 +238,7 @@ def _coerce_int(value: Any, key_name: str) -> int:
     """
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"Config key '{key_name}' must be an integer.")
-    return value
+    return int(value)
 
 
 def _coerce_float(value: Any, key_name: str) -> float:
@@ -372,7 +371,9 @@ def load_config(config_path: Path | str) -> GeneratorConfig:
         ),
         mesh=MeshConfig(
             mesh_dir=_coerce_path(mesh_section["mesh_dir"], "mesh.mesh_dir"),
-            download_gibson_flag=_coerce_bool(mesh_section["download_gibson_flag"], "mesh.download_gibson_flag"),
+            download_gibson_flag=_coerce_bool(
+                mesh_section["download_gibson_flag"], "mesh.download_gibson_flag"
+            ),
         ),
         scene=SceneConfig(
             sample_rate=_coerce_int(scene_section["sample_rate"], "scene.sample_rate"),
@@ -417,7 +418,6 @@ def list_audio_files(root_dir: Path) -> list[Path]:
     audio_files = list(root_dir.glob("*.wav"))
     return sorted(audio_files)
 
-
 def list_mesh_files(mesh_dir: Path) -> list[Path]:
     """
     Recursively retrieve all GLB mesh files from a directory.
@@ -443,7 +443,6 @@ def list_mesh_files(mesh_dir: Path) -> list[Path]:
         return []
     mesh_files = [p for p in mesh_dir.rglob("*.glb") if p.is_file()]
     return sorted(mesh_files)
-
 
 def ensure_meshes(mesh_dir: Path, download_gibson_flag: bool) -> list[Path]:
     """
@@ -491,7 +490,6 @@ def ensure_meshes(mesh_dir: Path, download_gibson_flag: bool) -> list[Path]:
         raise RuntimeError(f"Downloaded Gibson but still found no .glb meshes under '{mesh_dir}'.")
     return meshes
 
-
 def build_backend_kwargs_rlr(mesh_path: Path) -> dict[str, object]:
     """
     Build backend keyword arguments for RLR (Ray-based Light Rendering) backend.
@@ -512,8 +510,7 @@ def build_backend_kwargs_rlr(mesh_path: Path) -> dict[str, object]:
         "add_to_context": False,
     }
 
-
-def add_random_microphone(  # noqa: PLR0913
+def add_random_microphone(  # type: ignore[no-any-unimported] # noqa: PLR0913
     scene: audiblelight.Scene,
     mic_type: str,
     mesh: trimesh.Geometry,
@@ -559,8 +556,15 @@ def add_random_microphone(  # noqa: PLR0913
                 return True  # Successfully added microphone, exit the retry loop
             except ValueError:
                 if attempt == max_attempts - 1:
-                    # Give up on adding this microphone and move on to the next one
-                    return False
+                    # Otherwise add one using backend random placement
+                    return add_random_microphone(
+                        scene=scene,
+                        mic_type=mic_type,
+                        mesh=mesh,
+                        rng=rng,
+                        rng_needed=False,
+                        max_attempts=max_attempts,
+                    )
         return False
     else:
         try:
@@ -572,8 +576,7 @@ def add_random_microphone(  # noqa: PLR0913
         except ValueError:
             return False
 
-
-def add_random_fg_event(  # noqa: PLR0913
+def add_random_fg_event(  # type: ignore[no-any-unimported] # noqa: PLR0913
     fg_files: list[Path],
     scene: audiblelight.Scene,
     scene_duration: float,
@@ -645,8 +648,20 @@ def add_random_fg_event(  # noqa: PLR0913
                 return True  # Successfully added event, exit the retry loop
             except ValueError:
                 if attempt == max_attempts - 1:
-                    # Give up on adding this event and move on to the next one
-                    return False
+                    # Otherwise add one using backend random placement
+                    return add_random_fg_event(
+                        fg_files=fg_files,
+                        scene=scene,
+                        scene_duration=scene_duration,
+                        event_duration_min=event_duration_min,
+                        event_duration_max=event_duration_max,
+                        snr_min=snr_min,
+                        snr_max=snr_max,
+                        mesh=mesh,
+                        rng=rng,
+                        rng_needed=False,
+                        max_attempts=max_attempts,
+                    )
         return False
     else:
         try:
@@ -661,7 +676,6 @@ def add_random_fg_event(  # noqa: PLR0913
             return True
         except ValueError:
             return False
-
 
 def get_random_bg_noise(rng: np.random.Generator) -> str:
     """
