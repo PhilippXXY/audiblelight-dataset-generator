@@ -572,8 +572,15 @@ def add_random_microphone(  # type: ignore[no-any-unimported] # noqa: PLR0913
                 return True  # Successfully added microphone, exit the retry loop
             except ValueError:
                 if attempt == max_attempts - 1:
-                    # Give up on adding this microphone and move on to the next one
-                    return False
+                    # Otherwise add one using backend random placement
+                    return add_random_microphone(
+                        scene=scene,
+                        mic_type=mic_type,
+                        mesh=mesh,
+                        rng=rng,
+                        rng_needed=False,
+                        max_attempts=max_attempts,
+                    )
         return False
     else:
         try:
@@ -658,8 +665,20 @@ def add_random_fg_event(  # type: ignore[no-any-unimported] # noqa: PLR0913
                 return True  # Successfully added event, exit the retry loop
             except ValueError:
                 if attempt == max_attempts - 1:
-                    # Give up on adding this event and move on to the next one
-                    return False
+                    # Otherwise add one using backend random placement
+                    return add_random_fg_event(
+                        fg_files=fg_files,
+                        scene=scene,
+                        scene_duration=scene_duration,
+                        event_duration_min=event_duration_min,
+                        event_duration_max=event_duration_max,
+                        snr_min=snr_min,
+                        snr_max=snr_max,
+                        mesh=mesh,
+                        rng=rng,
+                        rng_needed=False,
+                        max_attempts=max_attempts,
+                    )
         return False
     else:
         try:
