@@ -6,7 +6,12 @@
 
 ## Overview
 
-Generate synthetic acoustic datasets with the AudibleLight [[1]](https://github.com/audiblelight/audiblelight) simulation framework.
+[![DOI](https://zenodo.org/badge/1152975535.svg)](https://doi.org/10.5281/zenodo.18607188)
+![GitHub Release](https://img.shields.io/github/v/release/philippxxy/audiblelight-dataset-generator)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/PhilippXXY/audiblelight-dataset-generator/.github%2Fworkflows%2Frelease.yaml)
+![platform](https://img.shields.io/badge/platform-linux%2Famd64-blue?logo=linux)
+
+Generate synthetic acoustic datasets with the AudibleLight simulation framework [[1]](https://github.com/audiblelight/audiblelight).
 
 ---
 
