@@ -25,7 +25,6 @@ class PathsConfig:
     audio_out: Path
     meta_out: Path
 
-
 @dataclass(frozen=True)
 class RuntimeConfig:
     """Runtime controls for scene generation."""
@@ -34,14 +33,12 @@ class RuntimeConfig:
     num_scenes: int
     num_mics_per_scene: int
 
-
 @dataclass(frozen=True)
 class MeshConfig:
     """Mesh discovery."""
 
     mesh_dir: Path
     download_gibson_flag: bool
-
 
 @dataclass(frozen=True)
 class SceneConfig:
@@ -53,7 +50,6 @@ class SceneConfig:
     mic_type: str
     bg_noise_floor_db: float
 
-
 @dataclass(frozen=True)
 class EventsConfig:
     """Foreground event generation configuration."""
@@ -63,7 +59,6 @@ class EventsConfig:
     event_duration_max: float
     snr_min: float
     snr_max: float
-
 
 @dataclass(frozen=True)
 class GeneratorConfig:
@@ -75,7 +70,6 @@ class GeneratorConfig:
     scene: SceneConfig
     events: EventsConfig
 
-
 class AlwaysClass0Mapping(ClassMapping):  # type: ignore[no-any-unimported]
     """A ClassMapping that always returns class index 0 with a dummy label."""
 
@@ -85,7 +79,6 @@ class AlwaysClass0Mapping(ClassMapping):  # type: ignore[no-any-unimported]
     def infer_label_idx_from_filepath(self, filepath: Union[Path, str]) -> tuple[int, str]:
         """Return class index 0 and label 'dummy'."""
         return (0, "dummy")
-
 
 def _build_default_output_paths() -> tuple[Path, Path]:
     """
@@ -102,7 +95,6 @@ def _build_default_output_paths() -> tuple[Path, Path]:
     audio_out = output_root.joinpath("em32_dev", "dev-train")
     meta_out = output_root.joinpath("metadata_dev", "dev-train")
     return audio_out, meta_out
-
 
 def _default_config_dict() -> dict[str, dict[str, Any]]:
     """
@@ -144,7 +136,6 @@ def _default_config_dict() -> dict[str, dict[str, Any]]:
             "snr_max": 30.0,
         },
     }
-
 
 def _normalise_mapping(value: Any, key_name: str) -> dict[str, Any]:
     """
@@ -229,7 +220,6 @@ def _coerce_bool(value: Any, key_name: str) -> bool:
         return value
     raise ValueError(f"Config key '{key_name}' must be a boolean.")
 
-
 def _coerce_int(value: Any, key_name: str) -> int:
     """
     Coerce a config value to int, failing on invalid values.
@@ -293,7 +283,6 @@ def _coerce_str(value: Any, key_name: str) -> str:
     if value == "":
         raise ValueError(f"Config key '{key_name}' must not be empty.")
     return value
-
 
 def _coerce_path(value: Any, key_name: str) -> Path:
     """
@@ -410,7 +399,6 @@ def load_config(config_path: Path | str) -> GeneratorConfig:
         ),
     )
 
-
 def list_audio_files(root_dir: Path) -> list[Path]:
     """
     List all audio files in the specified directory.
@@ -429,7 +417,6 @@ def list_audio_files(root_dir: Path) -> list[Path]:
         raise ValueError(f"The specified path '{root_dir}' is not a valid directory.")
     audio_files = list(root_dir.glob("*.wav"))
     return sorted(audio_files)
-
 
 def list_mesh_files(mesh_dir: Path) -> list[Path]:
     """
@@ -456,7 +443,6 @@ def list_mesh_files(mesh_dir: Path) -> list[Path]:
         return []
     mesh_files = [p for p in mesh_dir.rglob("*.glb") if p.is_file()]
     return sorted(mesh_files)
-
 
 def ensure_meshes(mesh_dir: Path, download_gibson_flag: bool) -> list[Path]:
     """
@@ -504,7 +490,6 @@ def ensure_meshes(mesh_dir: Path, download_gibson_flag: bool) -> list[Path]:
         raise RuntimeError(f"Downloaded Gibson but still found no .glb meshes under '{mesh_dir}'.")
     return meshes
 
-
 def build_backend_kwargs_rlr(mesh_path: Path) -> dict[str, object]:
     """
     Build backend keyword arguments for RLR (Ray-based Light Rendering) backend.
@@ -524,7 +509,6 @@ def build_backend_kwargs_rlr(mesh_path: Path) -> dict[str, object]:
         "mesh": str(mesh_path),
         "add_to_context": False,
     }
-
 
 def add_random_microphone(  # type: ignore[no-any-unimported] # noqa: PLR0913
     scene: audiblelight.Scene,
@@ -591,7 +575,6 @@ def add_random_microphone(  # type: ignore[no-any-unimported] # noqa: PLR0913
             return True
         except ValueError:
             return False
-
 
 def add_random_fg_event(  # type: ignore[no-any-unimported] # noqa: PLR0913
     fg_files: list[Path],
@@ -693,7 +676,6 @@ def add_random_fg_event(  # type: ignore[no-any-unimported] # noqa: PLR0913
             return True
         except ValueError:
             return False
-
 
 def get_random_bg_noise(rng: np.random.Generator) -> str:
     """
