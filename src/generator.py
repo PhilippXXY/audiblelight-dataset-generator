@@ -12,7 +12,7 @@ from pathlib import Path
 
 import audiblelight
 import numpy as np
-import trimesh
+from audiblelight import utils as audiblelight_utils
 from audiblelight.augmentation import (
     Compressor,
     Fade,
@@ -31,6 +31,8 @@ def main(config_path: Path | str = Path("config/config.yaml")) -> None:
     """Generate a dataset with AudibleLight."""
     cfg = utils.load_config(config_path)
     rng = np.random.default_rng(seed=cfg.runtime.seed)
+    # Set the global seed for any random operations within AudibleLight to ensure reproducibility.
+    audiblelight_utils.SEED = cfg.runtime.seed
 
     fg_files = utils.list_audio_files(cfg.paths.fg_dir)
     if not fg_files:
@@ -62,7 +64,6 @@ def main(config_path: Path | str = Path("config/config.yaml")) -> None:
         stem = f"scene_{scene_idx:05d}"
 
         mesh_path = meshes[int(rng.integers(0, len(meshes)))]
-        mesh = trimesh.load(mesh_path)
         backend_kwargs = utils.build_backend_kwargs_rlr(mesh_path)
 
         scene = audiblelight.Scene(
@@ -82,9 +83,6 @@ def main(config_path: Path | str = Path("config/config.yaml")) -> None:
             utils.add_random_microphone(
                 scene,
                 mic_type=cfg.scene.mic_type,
-                mesh=mesh,
-                rng=rng,
-                max_attempts=30,
             )
 
         for _ in range(cfg.events.events_per_scene):
@@ -96,10 +94,7 @@ def main(config_path: Path | str = Path("config/config.yaml")) -> None:
                 event_duration_max=cfg.events.event_duration_max,
                 snr_min=cfg.events.snr_min,
                 snr_max=cfg.events.snr_max,
-                mesh=mesh,
                 rng=rng,
-                rng_needed=False,
-                max_attempts=30,
             )
 
         scene.add_ambience(noise=utils.get_random_bg_noise(rng))

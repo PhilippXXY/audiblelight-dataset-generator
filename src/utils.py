@@ -8,7 +8,6 @@ from typing import Any, Union
 
 import audiblelight
 import numpy as np
-import trimesh
 import yaml
 from audiblelight.class_mappings import ClassMapping
 from audiblelight.download_data import download_gibson
@@ -513,10 +512,6 @@ def build_backend_kwargs_rlr(mesh_path: Path) -> dict[str, object]:
 def add_random_microphone(  # type: ignore[no-any-unimported] # noqa: PLR0913
     scene: audiblelight.Scene,
     mic_type: str,
-    mesh: trimesh.Geometry,
-    rng: np.random.Generator,
-    rng_needed: bool = True,
-    max_attempts: int = 30,
 ) -> bool:
     """
     Attempt to add a microphone at a random valid position in the scene.
@@ -527,54 +522,20 @@ def add_random_microphone(  # type: ignore[no-any-unimported] # noqa: PLR0913
         The scene to which the microphone should be added.
     mic_type: str
         The type of microphone to add (e.g., 'eigenmike32').
-    mesh: trimesh.Geometry
-        The mesh geometry of the scene, used to determine valid microphone positions.
-    rng: np.random.Generator
-        A random number generator for reproducibility.
-    rng_needed: bool, optional
-        If True, use the provided RNG to generate random positions.
-        If False, rely on the backend to choose random positions. Default is True.
-    max_attempts: int, optional
-        The maximum number of attempts to try adding a microphone at a random position before
-        giving up.
-        Default is 30.
 
     Returns
     -------
     : bool
         True if the microphone was successfully added, False otherwise.
     """
-    if rng_needed:
-        min_mesh_bound, max_mesh_bound = mesh.bounds
-        for attempt in range(max_attempts):
-            mic_position = min_mesh_bound + (max_mesh_bound - min_mesh_bound) * rng.random(3)
-            try:
-                scene.add_microphone(
-                    microphone_type=mic_type,
-                    position=mic_position,
-                )
-                return True  # Successfully added microphone, exit the retry loop
-            except ValueError:
-                if attempt == max_attempts - 1:
-                    # Otherwise add one using backend random placement
-                    return add_random_microphone(
-                        scene=scene,
-                        mic_type=mic_type,
-                        mesh=mesh,
-                        rng=rng,
-                        rng_needed=False,
-                        max_attempts=max_attempts,
-                    )
+    try:
+        scene.add_microphone(
+            microphone_type=mic_type,
+            position=None,  # Let the backend choose a valid random position
+        )
+        return True
+    except ValueError:
         return False
-    else:
-        try:
-            scene.add_microphone(
-                microphone_type=mic_type,
-                position=None,  # Let the backend choose a valid random position
-            )
-            return True
-        except ValueError:
-            return False
 
 def add_random_fg_event(  # type: ignore[no-any-unimported] # noqa: PLR0913
     fg_files: list[Path],
@@ -584,10 +545,7 @@ def add_random_fg_event(  # type: ignore[no-any-unimported] # noqa: PLR0913
     event_duration_max: float,
     snr_min: float,
     snr_max: float,
-    mesh: trimesh.Geometry,
     rng: np.random.Generator,
-    rng_needed: bool = False,
-    max_attempts: int = 30,
 ) -> bool:
     """
     Attempt to add a foreground event at a random valid position in the scene.
@@ -608,74 +566,24 @@ def add_random_fg_event(  # type: ignore[no-any-unimported] # noqa: PLR0913
         The minimum signal-to-noise ratio (SNR) for the foreground event in decibels.
     snr_max: float
         The maximum signal-to-noise ratio (SNR) for the foreground event in decibels.
-    mesh: trimesh.Geometry
-        The mesh geometry of the scene, used to determine valid event positions.
-    rng: np.random.Generator
-        A random number generator for reproducibility.
-    rng_needed: bool, optional
-        If True, use the provided RNG to generate random event positions.
-        If False, rely on the backend to choose random positions. Default is False.
-    max_attempts: int, optional
-        The maximum number of attempts to try adding a foreground event at a random position before
-        giving up.
-        Default is 30.
     """
     wav = Path(fg_files[int(rng.integers(0, len(fg_files)))])
     event_duration = float(rng.uniform(event_duration_min, event_duration_max))
     event_start = float(rng.uniform(0, scene_duration - event_duration))
     signal_to_noise_ratio = float(rng.uniform(snr_min, snr_max))
 
-    if rng_needed:
-        # Not working properly yet as the current RLR backend implementation
-        # does not properly handle invalid event positions and gives us no way to query
-        # valid positions before trying to add the event.
-        min_mesh_bound, max_mesh_bound = mesh.bounds
-        margins = (max_mesh_bound - min_mesh_bound) * 0.1
-        min_mesh_bound += margins
-        max_mesh_bound -= margins
-        for attempt in range(max_attempts):
-            event_position = min_mesh_bound + (max_mesh_bound - min_mesh_bound) * rng.random(3)
-            try:
-                scene.add_event_static(
-                    filepath=wav,
-                    position=event_position,
-                    scene_start=event_start,
-                    duration=event_duration,
-                    snr=signal_to_noise_ratio,
-                    class_id=0,
-                    augmentations=3,
-                )
-                return True  # Successfully added event, exit the retry loop
-            except ValueError:
-                if attempt == max_attempts - 1:
-                    # Otherwise add one using backend random placement
-                    return add_random_fg_event(
-                        fg_files=fg_files,
-                        scene=scene,
-                        scene_duration=scene_duration,
-                        event_duration_min=event_duration_min,
-                        event_duration_max=event_duration_max,
-                        snr_min=snr_min,
-                        snr_max=snr_max,
-                        mesh=mesh,
-                        rng=rng,
-                        rng_needed=False,
-                        max_attempts=max_attempts,
-                    )
+    try:
+        scene.add_event_static(
+            filepath=wav,
+            position=None,  # Let the backend choose a valid random position
+            scene_start=event_start,
+            duration=event_duration,
+            snr=signal_to_noise_ratio,
+            class_id=0,
+        )
+        return True
+    except ValueError:
         return False
-    else:
-        try:
-            scene.add_event_static(
-                filepath=wav,
-                position=None,  # Let the backend choose a valid random position
-                scene_start=event_start,
-                duration=event_duration,
-                snr=signal_to_noise_ratio,
-                class_id=0,
-            )
-            return True
-        except ValueError:
-            return False
 
 def get_random_bg_noise(rng: np.random.Generator) -> str:
     """
