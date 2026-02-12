@@ -8,7 +8,6 @@ from typing import Any, Union
 
 import audiblelight
 import numpy as np
-import trimesh
 import yaml
 from audiblelight.class_mappings import ClassMapping
 from audiblelight.download_data import download_gibson

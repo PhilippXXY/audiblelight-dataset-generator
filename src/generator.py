@@ -12,7 +12,6 @@ from pathlib import Path
 
 import audiblelight
 import numpy as np
-import trimesh
 from audiblelight import utils as audiblelight_utils
 from audiblelight.augmentation import (
     Compressor,
@@ -65,7 +64,6 @@ def main(config_path: Path | str = Path("config/config.yaml")) -> None:
         stem = f"scene_{scene_idx:05d}"
 
         mesh_path = meshes[int(rng.integers(0, len(meshes)))]
-        mesh = trimesh.load(mesh_path)
         backend_kwargs = utils.build_backend_kwargs_rlr(mesh_path)
 
         scene = audiblelight.Scene(
