@@ -1,4 +1,3 @@
-
 """
 Module for processing and transforming audio files.
 
@@ -6,6 +5,7 @@ This module provides functionality to load audio files, resample them to a targe
 sample rate, convert them to mono, and save the processed results.
 """
 
+import argparse
 from pathlib import Path
 
 import librosa
@@ -58,10 +58,33 @@ def process_audio_files(input_path: Path, output_path: Path, sample_rate: int = 
         except Exception as e:
             print(f"Error processing {audio_file}: {e}")
 
-if __name__ == "__main__":
-    input_dir = Path("data/esc50/audio")
-    output_dir = Path("data/esc50/fg_esc50_24k_mono")
 
-    process_audio_files(input_dir, output_dir, sample_rate=24000)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Process and transform audio files.")
+    parser.add_argument(
+        "--input_dir",
+        type=str,
+        default="data/esc50/audio",
+        help="Directory containing input audio files.",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default="data/esc50/fg_esc50_24k_mono",
+        help="Directory to save processed audio files.",
+    )
+    parser.add_argument(
+        "--sample_rate",
+        type=int,
+        default=24000,
+        help="Target sample rate for processed audio files.",
+    )
+    args = parser.parse_args()
+
+    input_dir = Path(args.input_dir)
+    output_dir = Path(args.output_dir)
+    sample_rate = args.sample_rate
+
+    process_audio_files(input_dir, output_dir, sample_rate=sample_rate)
 
     print("Audio processing complete.")

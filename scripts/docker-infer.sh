@@ -41,6 +41,7 @@ usage() {
     echo "  DOCKER_IMAGE      Docker image to use (default: ${IMAGE_NAME})"
     echo "  DOCKER_PULL       Auto-pull image before run (default: true)"
     echo "  DOCKER_PLATFORM   Must be linux/amd64"
+    echo "  FG_DIR            Optional host directory with foreground WAV files"
     echo "  GIBSON_VOLUME     Docker volume for Gibson cache (default: audiblelight-gibson-cache)"
     echo ""
     echo "Examples:"
@@ -48,8 +49,12 @@ usage() {
     echo "  $0 /home/user/my_config.yaml"
     echo ""
     echo "Your config file should contain (under paths:):"
+    echo "  - fg_dir (optional: absolute host path or in-image relative path)"
     echo "  - audio_out"
     echo "  - meta_out"
+    echo ""
+    echo "If FG_DIR is set, it overrides paths.fg_dir and is mounted read-only to /inputs/fg"
+    echo "If paths.fg_dir is absolute, it is mounted read-only to /inputs/fg automatically"
     echo ""
     echo "If audio_out or meta_out are missing, defaults under:"
     echo "  ${DEFAULT_ROOT}/output/dataset_<timestamp>/..."
@@ -115,11 +120,12 @@ write_docker_config() {
     local dst="$2"
     local audio="${3:-}"
     local meta="${4:-}"
+    local fg="${5:-}"
     if [[ -z "$audio" || -z "$meta" ]]; then
         log_error "Internal error: missing audio/meta output paths."
         exit 1
     fi
-    awk -v audio="$audio" -v meta="$meta" '
+    awk -v audio="$audio" -v meta="$meta" -v fg="$fg" '
       function indent_len(s) { match(s, /^[[:space:]]*/); return RLENGTH }
       function indent_str(n) { return sprintf("%*s", n, "") }
       BEGIN {
@@ -127,6 +133,7 @@ write_docker_config() {
         paths_seen = 0
         audio_found = 0
         meta_found = 0
+        fg_found = 0
       }
       $0 ~ /^[[:space:]]*paths:[[:space:]]*$/ {
         in_paths = 1
@@ -141,6 +148,7 @@ write_docker_config() {
           indent = indent_str(paths_indent + 2)
           if (!audio_found) print indent "audio_out: \"" audio "\""
           if (!meta_found) print indent "meta_out: \"" meta "\""
+          if (fg != "" && !fg_found) print indent "fg_dir: \"" fg "\""
           in_paths = 0
         } else if ($0 ~ /^[[:space:]]*audio_out:[[:space:]]*/) {
           print indent_str(indent_len($0)) "audio_out: \"" audio "\""
@@ -150,6 +158,10 @@ write_docker_config() {
           print indent_str(indent_len($0)) "meta_out: \"" meta "\""
           meta_found = 1
           next
+        } else if (fg != "" && $0 ~ /^[[:space:]]*fg_dir:[[:space:]]*/) {
+          print indent_str(indent_len($0)) "fg_dir: \"" fg "\""
+          fg_found = 1
+          next
         }
       }
       { print }
@@ -158,11 +170,13 @@ write_docker_config() {
           indent = indent_str(paths_indent + 2)
           if (!audio_found) print indent "audio_out: \"" audio "\""
           if (!meta_found) print indent "meta_out: \"" meta "\""
+          if (fg != "" && !fg_found) print indent "fg_dir: \"" fg "\""
         }
         if (!paths_seen) {
           print "paths:"
           print "  audio_out: \"" audio "\""
           print "  meta_out: \"" meta "\""
+          if (fg != "") print "  fg_dir: \"" fg "\""
         }
       }
     ' "$src" > "$dst"
@@ -193,8 +207,14 @@ CONFIG_DIR=$(cd "$(dirname "$CONFIG_FILE")" && pwd)
 log_info "Using config file: $CONFIG_FILE"
 
 # Parse host paths from config file
+FG_DIR_IN_CONFIG=$(extract_yaml_section_value "paths" "fg_dir" "$CONFIG_FILE")
 AUDIO_OUTPUT_PATH=$(extract_yaml_section_value "paths" "audio_out" "$CONFIG_FILE")
 META_OUTPUT_PATH=$(extract_yaml_section_value "paths" "meta_out" "$CONFIG_FILE")
+
+FG_INPUT_CONTAINER_PATH="/inputs/fg"
+FG_INPUT_HOST_PATH=""
+DOCKER_FG_DIR=""
+FG_DIR_OVERRIDE="${FG_DIR:-}"
 
 # Validate extracted paths
 if [[ -z "$AUDIO_OUTPUT_PATH" ]]; then
@@ -206,6 +226,27 @@ if [[ -z "$META_OUTPUT_PATH" ]]; then
     META_OUTPUT_PATH="$DEFAULT_META_OUT"
 fi
 
+# Determine whether foreground data should be mounted from host.
+# - FG_DIR env var always overrides config.
+# - Absolute paths.fg_dir in config are treated as host paths and mounted.
+if [[ -n "$FG_DIR_OVERRIDE" ]]; then
+    FG_INPUT_HOST_PATH=$(resolve_path "$FG_DIR_OVERRIDE" "$CONFIG_DIR")
+    log_info "Using FG_DIR override from environment."
+elif [[ -n "$FG_DIR_IN_CONFIG" ]]; then
+    if [[ "$FG_DIR_IN_CONFIG" == "~"* || "$FG_DIR_IN_CONFIG" = /* ]]; then
+        FG_INPUT_HOST_PATH=$(resolve_path "$FG_DIR_IN_CONFIG" "$CONFIG_DIR")
+        log_info "Detected absolute paths.fg_dir in config; mounting host foreground directory."
+    fi
+fi
+
+if [[ -n "$FG_INPUT_HOST_PATH" ]]; then
+    if [[ ! -d "$FG_INPUT_HOST_PATH" ]]; then
+        log_error "Foreground directory not found: $FG_INPUT_HOST_PATH"
+        exit 1
+    fi
+    DOCKER_FG_DIR="$FG_INPUT_CONTAINER_PATH"
+fi
+
 # Convert to absolute paths if relative.
 AUDIO_OUTPUT_PATH=$(resolve_path "$AUDIO_OUTPUT_PATH" "$CONFIG_DIR")
 META_OUTPUT_PATH=$(resolve_path "$META_OUTPUT_PATH" "$CONFIG_DIR")
@@ -214,6 +255,13 @@ META_OUTPUT_PATH=$(resolve_path "$META_OUTPUT_PATH" "$CONFIG_DIR")
 mkdir -p "$AUDIO_OUTPUT_PATH" "$META_OUTPUT_PATH"
 
 log_info "Mounting volumes:"
+if [[ -n "$FG_INPUT_HOST_PATH" ]]; then
+    log_info "  Foreground: $FG_INPUT_HOST_PATH -> $FG_INPUT_CONTAINER_PATH (ro)"
+elif [[ -n "$FG_DIR_IN_CONFIG" ]]; then
+    log_info "  Foreground: using in-image path from config: $FG_DIR_IN_CONFIG"
+else
+    log_info "  Foreground: using in-image default"
+fi
 log_info "  Audio Out:  $AUDIO_OUTPUT_PATH"
 log_info "  Meta Out:   $META_OUTPUT_PATH"
 log_info "  Config:     $CONFIG_FILE -> /config/config.yaml"
@@ -224,7 +272,7 @@ trap 'rm -f "$DOCKER_CONFIG"' EXIT
 
 # Replace path keys in config for container runtime.
 write_docker_config "$CONFIG_FILE" "$DOCKER_CONFIG" \
-    "$AUDIO_OUTPUT_PATH" "$META_OUTPUT_PATH"
+    "$AUDIO_OUTPUT_PATH" "$META_OUTPUT_PATH" "$DOCKER_FG_DIR"
 
 log_info "Running Docker container..."
 log_info "Image: $IMAGE_NAME"
@@ -258,6 +306,10 @@ if [[ -n "$GIBSON_VOLUME" && "$GIBSON_VOLUME" != "none" ]]; then
     log_info "Gibson cache volume: ${GIBSON_VOLUME} -> /app/data/gibson"
 else
     log_warn "Gibson cache volume disabled; Gibson will re-download each run."
+fi
+
+if [[ -n "$FG_INPUT_HOST_PATH" ]]; then
+    DOCKER_RUN_ARGS+=(-v "${FG_INPUT_HOST_PATH}:${FG_INPUT_CONTAINER_PATH}:ro")
 fi
 
 docker run "${DOCKER_RUN_ARGS[@]}" \
